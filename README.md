@@ -19,3 +19,6 @@
 | Настроить роспбиан| 15 ноября |
 | Написать на питоне| 1 декабря |
 | Тестирование | 15 декабря |
+
+<img width="742" alt="image" src="https://github.com/user-attachments/assets/0b0d7f08-f901-4339-b584-fd27d6e01131">
+
