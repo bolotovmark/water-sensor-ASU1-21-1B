@@ -7,18 +7,22 @@ import java.net.*;
 import java.io.*;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
+
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
-
+import android.view.View;
+import android.widget.Button;
 import android.widget.TextView;
 
 public class MainActivity extends AppCompatActivity {
 
     int id = 100;
     TextView tv;
+    Button btn_on;
+    Button btn_off;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -26,6 +30,23 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         tv = findViewById(R.id.textView);
+        btn_on = findViewById(R.id.button2);
+        btn_off = findViewById(R.id.button);
+
+        btn_on.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                new OnOffSender().execute("on");
+            }
+        });
+
+        btn_off.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                new OnOffSender().execute("off");
+            }
+        });
+
 
         createNotificationChannel();
 
@@ -45,6 +66,28 @@ public class MainActivity extends AppCompatActivity {
             notificationManager.createNotificationChannel(channel);
         }
     }
+    сlass OnOffSender extends AsyncTask<String, Void, Void> {
+        @Override
+        protected Void doInBackground(String... strings) {
+            try {
+                URL url = new URL("http://192.168.43.42:8080");
+                HttpURLConnection con = (HttpURLConnection) url.openConnection();
+                con.setRequestMethod("POST");
+                con.setRequestProperty("Content-Type", "text/html");
+                con.setDoOutput(true);
+
+                DataOutputStream dStream = new DataOutputStream(con.getOutputStream());
+                dStream.writeBytes(strings[0]);
+                dStream.flush();
+                dStream.close();
+
+            } catch (Exception e) {
+
+            }
+            return null;
+        }
+    }
+
 
     class RequestSender extends AsyncTask<Void, String, Void> {
         @Override
@@ -52,7 +95,7 @@ public class MainActivity extends AppCompatActivity {
         {
             while (true) {
                 String data = "";
-                try { //http://192.168.43.211:8080
+                try {
                     URL url = new URL("http://192.168.43.42:8080");
                     HttpURLConnection con = (HttpURLConnection) url.openConnection();
                     con.setRequestMethod("GET");
