@@ -1,5 +1,6 @@
 package com.example.mobile;
 
+import android.annotation.SuppressLint;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.graphics.Color;
@@ -15,11 +16,18 @@ import androidx.core.app.NotificationManagerCompat;
 
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.LogManager;
+import java.util.logging.Logger;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -29,11 +37,18 @@ public class MainActivity extends AppCompatActivity {
     Button btn_on = findViewById(R.id.button2);
     Button btn_off = findViewById(R.id.button);
     Boolean isConnection=true;
-    String ServerAdress="http://192.168.43.42:8080"; ////как пример
-    String cashData;
+    String ServerAddress ="http://192.168.43.42:8080";
+    String CashCommandPath="CashCommand.txt";
+    public static final Logger logger = Logger.getLogger(MainActivity.class.getName());
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        try {
+            LogManager.getLogManager().readConfiguration(
+                    MainActivity.class.getResourceAsStream("com/example/iotapplication/logging.properties"));
+        } catch (IOException ignored) { }
+        logger.log(Level.INFO,"application start");
+    }
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
@@ -43,11 +58,45 @@ public class MainActivity extends AppCompatActivity {
 
         createNotificationChannel();
 
-        ShowConnectionOn();
+    String command=GetCashCommand();
+        if (!command.equals("none")) new OnOffSender().execute(command);
 
         RequestSender RC = new RequestSender();
         RC.execute();
     }
+private String GetCashCommand()
+{
+    FileInputStream fin = null;
+    try {
+        fin = openFileInput(CashCommandPath);
+        byte[] bytes = new byte[fin.available()];
+        fin.read(bytes);
+        fin.close();
+        return new String (bytes);
+    }
+    catch(FileNotFoundException ex) {
+        SetCashCommand("none");
+    }
+    catch(IOException ex) {
+        logger.log(Level.SEVERE,"read file "+CashCommandPath,ex);
+    }
+    return "none";
+}
+private Boolean SetCashCommand(String command)
+{
+    FileOutputStream fos = null;
+    try {
+        fos = openFileOutput(CashCommandPath, MODE_PRIVATE);
+        fos.write(command.getBytes());
+        fos.close();
+        return true;
+    }
+    catch(IOException ex) {
+        logger.log(Level.SEVERE,"write file "+CashCommandPath,ex);
+        return false;
+    }
+
+}
     private void ShowConnectionOff()
     {
         tv2.setText("Подключение отсутствует");
@@ -74,32 +123,35 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    @SuppressLint("StaticFieldLeak")
     сlass OnOffSender extends AsyncTask<String, Void, Void> {
         @Override
         protected Void doInBackground(String... strings) {
+        logger.log(Level.INFO,"try to send "+strings[0]);
+        if (!SetCashCommand(strings[0])) return null;
 
-            cashData=strings[0];
             if (!isConnection) return null;
-
             boolean endOperation=false;
             while (!endOperation) {
                 try {
-                    URL url = new URL(ServerAdress);
+                    String command=GetCashCommand();
+                    URL url = new URL(ServerAddress);
                     HttpURLConnection con = (HttpURLConnection) url.openConnection();
                     con.setRequestMethod("POST");
                     con.setRequestProperty("Content-Type", "text/html");
 
                     con.setDoOutput(true);
                     DataOutputStream dStream = new DataOutputStream(con.getOutputStream());
-                    dStream.writeBytes(cashData);
+                    dStream.writeBytes(command);
                     dStream.flush();
                     dStream.close();
 
                     ShowConnectionOn();
                     endOperation=true;
-
+                    logger.log(Level.FINE,command+" sent");
 
                 } catch (Exception e) {
+                    logger.log(Level.SEVERE,"connection failure",e);
                     ShowConnectionOff();
                     try {TimeUnit.SECONDS.sleep(3);} catch (InterruptedException ignored) {}
                 }
@@ -109,6 +161,7 @@ public class MainActivity extends AppCompatActivity {
 
 
 
+    @SuppressLint("StaticFieldLeak")
     class RequestSender extends AsyncTask<Void, String, Void> {
         @Override
         protected Void doInBackground(Void... voids)
@@ -116,7 +169,7 @@ public class MainActivity extends AppCompatActivity {
             while (true) {
                 StringBuilder data = new StringBuilder();;
                 try {
-                    URL url = new URL(ServerAdress);
+                    URL url = new URL(ServerAddress);
                     HttpURLConnection con = (HttpURLConnection) url.openConnection();
                     con.setRequestMethod("GET");
                     con.setRequestProperty("Content-Type", "text/html");
@@ -128,7 +181,7 @@ public class MainActivity extends AppCompatActivity {
                     in.close();
                     ShowConnectionOn();
                 } catch (Exception e) {
-                    ShowConnectionOn();
+                    logger.log(Level.SEVERE,"connection failure",e);
                 }
                 publishProgress(data.toString());
 
@@ -140,7 +193,9 @@ public class MainActivity extends AppCompatActivity {
         protected void onProgressUpdate(String... messages) {
             super.onProgressUpdate(messages[0]);
 
+
             if (messages[0].equals("w")) {
+                logger.log(Level.INFO,"alarm signal");
                 NotificationCompat.Builder builder = new NotificationCompat.Builder(getApplicationContext(), "101")
                         .setSmallIcon(R.drawable.signalicon)
                         .setContentTitle("ВНИМАНИЕ")
