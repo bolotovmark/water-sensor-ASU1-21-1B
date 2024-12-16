@@ -3,16 +3,22 @@ package com.example.mobile;
 import android.annotation.SuppressLint;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.content.Intent;
 import android.graphics.Color;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
+
+import com.google.zxing.integration.android.IntentIntegrator;
+import com.google.zxing.integration.android.IntentResult;
 
 import java.io.BufferedReader;
 import java.io.FileInputStream;
@@ -27,18 +33,23 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
+import java.util.logging.LogManager;
 import java.util.logging.Logger;
 
-public class MainActivity extends AppCompatActivity {
-
+public class MainActivity extends AppCompatActivity implements View.OnClickListener  {
     int id = 100;
     TextView tv;
     TextView tv2;
+    TextView tv_token;
     Button btn_on;
     Button btn_off;
-    String CashCommandPath="CashCommand.txt";
+    Button btn_qr;
+    String CommandPath ="CashCommand.txt";
+    String TokenPath="Token.txt";
     Logger logger;
-    String ServerAddress ="http://192.168.1.106:8080";   // пример
+    String ServerAddress ="http://192.168.1.100:8080";  // поправить
+    String token;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -46,11 +57,41 @@ public class MainActivity extends AppCompatActivity {
 
         tv=findViewById(R.id.textView);
         tv2=findViewById(R.id.textView2);
+        tv_token=findViewById(R.id.textView3);
         btn_on = findViewById(R.id.button2);
         btn_off = findViewById(R.id.button);
+        btn_qr = findViewById(R.id.button3);
+
+        String config="handlers= java.util.logging.ConsoleHandler,java.util.logging.FileHandler\n" +
+                "\n" +
+                "java.util.logging.FileHandler.pattern = /storage/emulated/0/IoTLog/IotAppLog%u.txt\n" +
+                "java.util.logging.FileHandler.level = ALL\n" +
+                "java.util.logging.FileHandler.limit = 1000000\n" +
+                "java.util.logging.FileHandler.count = 10\n" +
+                "java.util.logging.FileHandler.formatter = java.util.logging.SimpleFormatter\n" +
+                "\n" +
+                "java.util.logging.ConsoleHandler.level = ALL\n" +
+                "java.util.logging.ConsoleHandler.formatter = java.util.logging.SimpleFormatter";
+        FileOutputStream fos = null;
+        try {
+            fos = openFileOutput("logging.properties",MODE_PRIVATE);
+            fos.write(config.getBytes());
+            fos.close();
+        } catch (Exception e) {
+            logger.log(Level.SEVERE,"properties write fatal",e);
+        }
+
 
         logger = Logger.getLogger(MainActivity.class.getName());
 
+        try {
+            FileInputStream fis = openFileInput("logging.properties");
+            LogManager.getLogManager().readConfiguration(fis);
+        } catch (IOException e) {
+            logger.log(Level.SEVERE,"properties is not found",e);
+        }
+
+        /*
         try {
             System.setProperty("java.util.logging.config.file",
                     "logging.properties");
@@ -58,48 +99,74 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             logger.log(Level.SEVERE,"logger is not ready",e);
         }
+
+         */
+
         logger.log(Level.INFO,"application start");
-    }
 
-        btn_on.setOnClickListener(v -> SetCashCommand("on"));
-
-        btn_off.setOnClickListener(v -> SetCashCommand("on"));
+        btn_on.setOnClickListener(v -> SetStringToFile("on", CommandPath));
+        btn_off.setOnClickListener(v -> SetStringToFile("off", CommandPath));
+        btn_qr.setOnClickListener(this);
 
         createNotificationChannel();
+
+        token=GetStringFromFile(TokenPath);
+        tv_token.setText(token);
 
         ShowConnectionOff();
 
         RequestSender RC = new RequestSender();
         RC.execute();
     }
+    @Override
+    public void onClick(View v) {
+        IntentIntegrator intentIntegrator = new IntentIntegrator(this);
+        intentIntegrator.setPrompt("Scan a barcode or QR Code");
+        intentIntegrator.setOrientationLocked(true);
+        intentIntegrator.initiateScan();
+    }
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        IntentResult intentResult = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
+        if (intentResult != null) {
+            if (intentResult.getContents() == null) {
+                //Toast.makeText(getBaseContext(), "Cancelled", Toast.LENGTH_SHORT).show();
+            } else {
+                token=intentResult.getContents();
+                tv_token.setText(token);
+            }
+        } else {
+            super.onActivityResult(requestCode, resultCode, data);
+        }
+    }
 
-private String GetCashCommand()
-{
+    private String GetStringFromFile(String path)
+    {
     try {
-        FileInputStream fin = openFileInput(CashCommandPath);
+        FileInputStream fin = openFileInput(path);
         byte[] bytes = new byte[fin.available()];
         fin.read(bytes);
         fin.close();
         return new String (bytes);
     }
     catch(FileNotFoundException ex) {
-        SetCashCommand("none");
+        SetStringToFile("none",path);
     }
     catch(IOException ex) {
-        logger.log(Level.SEVERE,"read file "+CashCommandPath,ex);
+        logger.log(Level.SEVERE,"read file "+path,ex);
     }
     return "none";
 }
-private void SetCashCommand(String command)
-{
-
+    private void SetStringToFile(String data,String path)
+    {
     try {
-        FileOutputStream fos = openFileOutput(CashCommandPath, MODE_PRIVATE);
-        fos.write(command.getBytes());
+        FileOutputStream fos = openFileOutput(path,MODE_PRIVATE);
+        fos.write(data.getBytes());
         fos.close();
     }
     catch(IOException ex) {
-        logger.log(Level.SEVERE,"write file "+CashCommandPath,ex);
+        logger.log(Level.SEVERE,"write file "+path,ex);
     }
 }
     private void ShowConnectionOff()
@@ -126,13 +193,14 @@ private void SetCashCommand(String command)
         }
     }
 
+
     @SuppressLint("StaticFieldLeak")
     class RequestSender extends AsyncTask<Void, String, Void> {
         @Override
         protected Void doInBackground(Void... voids)
         {
             while (true) {
-                String command=GetCashCommand();
+                String command=GetStringFromFile(CommandPath);
                 if (!command.equals("none"))
                 {
                     boolean endOperation=false;
@@ -144,6 +212,7 @@ private void SetCashCommand(String command)
                             URL obj = new URL(ServerAddress);
                             HttpURLConnection con = (HttpURLConnection) obj.openConnection();
                             con.setRequestMethod("POST");
+                            con.setConnectTimeout(2000);
                             con.setRequestProperty("Content-Type", "text/html");
                             con.setDoOutput(true);
 
@@ -165,8 +234,9 @@ private void SetCashCommand(String command)
 
                             publishProgress("connection on");
                             endOperation=true;
-
+                            SetStringToFile("none", CommandPath);
                             logger.log(Level.INFO,"command "+command+" sent, code: "+ r +" data: "+data);
+
                         } catch (Exception e) {
                             logger.log(Level.SEVERE,"connection failure",e);
                             publishProgress("connection off");
@@ -195,7 +265,7 @@ private void SetCashCommand(String command)
                 }
                 publishProgress(data.toString());
 
-                try {TimeUnit.SECONDS.sleep(5);} catch (InterruptedException ignored) {}
+                try {TimeUnit.SECONDS.sleep(3);} catch (InterruptedException ignored) {}
             }
         }
 

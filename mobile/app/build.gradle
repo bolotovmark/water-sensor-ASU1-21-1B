@@ -8,7 +8,7 @@ android {
 
     defaultConfig {
         applicationId "com.example.mobile"
-        minSdk 28
+        minSdk 24
         targetSdk 34
         versionCode 1
         versionName "1.0"
@@ -35,4 +35,5 @@ dependencies {
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core
+    implementation 'com.journeyapps:zxing-android-embedded:4.1.0'
 }
