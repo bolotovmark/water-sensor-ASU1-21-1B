@@ -1,26 +1,33 @@
 package com.example.mobile;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.AlertDialog;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
+import androidx.core.content.ContextCompat;
 
 import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -32,9 +39,10 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.FileHandler;
 import java.util.logging.Level;
-import java.util.logging.LogManager;
 import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener  {
     int id = 100;
@@ -62,47 +70,21 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         btn_off = findViewById(R.id.button);
         btn_qr = findViewById(R.id.button3);
 
-        String config="handlers= java.util.logging.ConsoleHandler,java.util.logging.FileHandler\n" +
-                "\n" +
-                "java.util.logging.FileHandler.pattern = /storage/emulated/0/IoTLog/IotAppLog%u.txt\n" +
-                "java.util.logging.FileHandler.level = ALL\n" +
-                "java.util.logging.FileHandler.limit = 1000000\n" +
-                "java.util.logging.FileHandler.count = 10\n" +
-                "java.util.logging.FileHandler.formatter = java.util.logging.SimpleFormatter\n" +
-                "\n" +
-                "java.util.logging.ConsoleHandler.level = ALL\n" +
-                "java.util.logging.ConsoleHandler.formatter = java.util.logging.SimpleFormatter";
-        FileOutputStream fos = null;
-        try {
-            fos = openFileOutput("logging.properties",MODE_PRIVATE);
-            fos.write(config.getBytes());
-            fos.close();
-        } catch (Exception e) {
-            logger.log(Level.SEVERE,"properties write fatal",e);
-        }
-
-
         logger = Logger.getLogger(MainActivity.class.getName());
-
-        try {
-            FileInputStream fis = openFileInput("logging.properties");
-            LogManager.getLogManager().readConfiguration(fis);
-        } catch (IOException e) {
-            logger.log(Level.SEVERE,"properties is not found",e);
-        }
-
-        /*
-        try {
-            System.setProperty("java.util.logging.config.file",
-                    "logging.properties");
-            logger.log(Level.INFO,"logger is ready");
-        } catch (Exception e) {
-            logger.log(Level.SEVERE,"logger is not ready",e);
-        }
-
-         */
-
         logger.log(Level.INFO,"application start");
+
+        //LOGGER CONFIG [BEGIN]
+        try {
+            String logFileName = Environment.getExternalStorageDirectory() + File.separator + "Iot_App_Log_%g.log";
+            FileHandler logHandler = null;
+            logHandler = new FileHandler(logFileName, 100 * 1024, 5, true);
+            logHandler.setFormatter(new SimpleFormatter());
+            logger.addHandler(logHandler);
+            logger.log(Level.INFO, "logger is ready");
+        } catch (IOException e) {
+            logger.log(Level.SEVERE, "logger is not ready", e);
+        }
+        //LOGGER CONFIG [END]
 
         btn_on.setOnClickListener(v -> SetStringToFile("on", CommandPath));
         btn_off.setOnClickListener(v -> SetStringToFile("off", CommandPath));
@@ -131,7 +113,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         IntentResult intentResult = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
         if (intentResult != null) {
             if (intentResult.getContents() == null) {
-                //Toast.makeText(getBaseContext(), "Cancelled", Toast.LENGTH_SHORT).show();
+                logger.log(Level.SEVERE, "QR reading - canceled");
             } else {
                 token=intentResult.getContents();
                 tv_token.setText(token);
@@ -214,6 +196,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                             con.setRequestMethod("POST");
                             con.setConnectTimeout(2000);
                             con.setRequestProperty("Content-Type", "text/html");
+                            on.setRequestProperty("User-Agent", "mobile");
+                            con.setRequestProperty("Token", token);
                             con.setDoOutput(true);
 
                             OutputStream os = con.getOutputStream();
@@ -252,6 +236,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     con.setConnectTimeout(2000);
                     con.setRequestMethod("GET");
                     con.setRequestProperty("Content-Type", "text/html");
+                    con.setRequestProperty("User-Agent", "mobile");
+                    con.setRequestProperty("Token", token);
                     BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
                     String inputLine;
                     while ((inputLine = in.readLine()) != null) {
