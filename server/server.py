@@ -1,3 +1,4 @@
+from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from io import BytesIO
 
@@ -13,7 +14,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(str.encode('no'))
         else:
             self.wfile.write(str.encode(self.toclientmessage))
-            toclientmessage = ''
+            self.toclientmessage = ''
     # определяем метод `do_POST`
     def do_POST(self):
         content_length = int(self.headers['Content-Length'])
@@ -26,6 +27,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         response.write(b'Received: ')
         response.write(body)
         self.wfile.write(response.getvalue())
+        self.toclientmessage = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         print(body)
 httpd = HTTPServer(('', 8080), SimpleHTTPRequestHandler)
 httpd.serve_forever()
