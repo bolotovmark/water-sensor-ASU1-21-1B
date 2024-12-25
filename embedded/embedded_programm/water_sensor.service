@@ -1,0 +1,14 @@
+[Unit]
+Description=Python Water Service
+After=syslog.target
+After=network.target
+
+[Service]
+Type=simple
+PIDFile=/run/python_water_service.pid
+ExecStart=
+Restart=on-failure
+OOMScoreAdjust=-100
+
+[Install]
+WantedBy=multi-user.target
