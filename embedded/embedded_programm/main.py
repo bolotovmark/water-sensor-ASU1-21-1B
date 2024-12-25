@@ -2,7 +2,14 @@
 import OPi.GPIO as GPIO
 import requests
 import time
-if __name__ == "__main__":
+
+def main():
+    headers = requests.utils.default_headers()
+    headers.update(
+            {
+                'User-Agent': 'Embedded'
+            }
+        )
     detecter_channel = 12
     sound_channel = 18
 
@@ -15,7 +22,7 @@ if __name__ == "__main__":
         rise = GPIO.wait_for_edge(detecter_channel, GPIO.RISING, 10000)
         send = False
         while not send:
-            response = requests.post("http://192.168.43.42:8080", data={"signal": "alarm"})
+            response = requests.post("http://192.168.43.42:8080", data={"signal": "alarm"}, headers=headers)
             GPIO.output(sound_channel, 1)
             if response.status_code == 200:
                 send = True
@@ -28,3 +35,6 @@ if __name__ == "__main__":
 
     GPIO.cleanup(detecter_channel)
     GPIO.cleanup(sound_channel)
+
+if __name__ == "__main__":
+    main()
