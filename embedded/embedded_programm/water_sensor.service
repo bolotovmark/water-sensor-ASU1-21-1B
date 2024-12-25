@@ -9,6 +9,9 @@ PIDFile=/run/python_water_service.pid
 ExecStart=
 Restart=on-failure
 OOMScoreAdjust=-100
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier="python_water_service"
 
 [Install]
 WantedBy=multi-user.target
