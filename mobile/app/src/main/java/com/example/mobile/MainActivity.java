@@ -161,9 +161,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 String[] ConnectionData=intentResult.getContents().split("-");
                 ServerAddress=ConnectionData[0];
                 token=ConnectionData[1];
-                SetStringToFile(ServerAddress,AddressPath);
-                SetStringToFile(token,TokenPath);
-                tv_token.setText(token);
+                SetStringToFile(ServerAddress,SERVER_ADDRESS_PATH);
+                SetStringToFile(token,TOKEN_PATH);
+                textToken.setText(String .format("%s %s",serverAddress,token));
             }
         } else {
             super.onActivityResult(requestCode, resultCode, data);
@@ -183,7 +183,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         SetStringToFile("none",path);
     }
     catch(IOException ex) {
-        logger.log(Level.SEVERE,"read file "+path);
+        logger.log(Level.SEVERE,String.format("read file %s : input/output", path));
+    }
+    catch (Exception ex) {
+        logger.log(Level.SEVERE, String.format("read file %s : unexpected", path));
     }
     return "none";
 }
@@ -195,18 +198,21 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         fos.close();
     }
     catch(IOException ex) {
-        logger.log(Level.SEVERE,"write file "+path);
+        logger.log(Level.SEVERE,String.format("write file %s : input/output", path));
+    }
+    catch (Exception ex) {
+        logger.log(Level.SEVERE, String.format("write file %s : unexpected", path));
     }
 }
     private void ShowConnectionOff()
     {
-        tv2.setText("Подключение отсутствует");
-        tv2.setTextColor(Color.RED);
+        textConnectionStatus.setText("Подключение отсутствует");
+        textConnectionStatus.setTextColor(Color.RED);
     }
     private void ShowConnectionOn()
     {
-        tv2.setText("Подключено");
-        tv2.setTextColor(Color.GREEN);
+        textConnectionStatus.setText("Подключено");
+        textConnectionStatus.setTextColor(Color.GREEN);
     }
 
     private void createNotificationChannel() {
@@ -225,6 +231,50 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     @SuppressLint("StaticFieldLeak")
     class RequestSender extends AsyncTask<Void, String, Void> {
+        SSLSocketFactory getSSL() {
+            try {
+                CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
+                InputStream caInput = new BufferedInputStream(getResources().openRawResource(R.raw.app));
+                Certificate ca = certFactory.generateCertificate(caInput);
+                caInput.close();
+                String keyStoreType = KeyStore.getDefaultType();
+                KeyStore keyStore = KeyStore.getInstance(keyStoreType);
+                keyStore.load(null, null);
+                keyStore.setCertificateEntry("ca", ca);
+                String tmfAlgorithm = TrustManagerFactory.getDefaultAlgorithm();
+                TrustManagerFactory tmf = TrustManagerFactory.getInstance(tmfAlgorithm);
+                tmf.init(keyStore);
+                SSLContext context = SSLContext.getInstance("TLS");
+                context.init(null, tmf.getTrustManagers(), null);
+                return context.getSocketFactory();
+            } catch (CertificateException e) {
+                logger.log(Level.SEVERE, "SSL error: certificate", e);
+                return null;
+            }
+            catch (IOException e) {
+                logger.log(Level.SEVERE, "SSL error: input/output", e);
+                return null;
+            }
+            catch (KeyStoreException e) {
+                logger.log(Level.SEVERE, "SSL error: keystore", e);
+                return null;
+            }
+            catch (NoSuchAlgorithmException e) {
+                logger.log(Level.SEVERE, "SSL error: algorithm", e);
+                return null;
+            }
+            catch (KeyManagementException e) {
+                logger.log(Level.SEVERE, "SSL error: key management", e);
+                return null;
+            }
+            catch (Exception e) {
+                logger.log(Level.SEVERE, "SSL error: unexpected", e);
+                return null;
+            }
+
+        }
+
+        @SuppressLint("AllowAllHostnameVerifier")
         @Override
         protected Void doInBackground(Void... voids)
         {
