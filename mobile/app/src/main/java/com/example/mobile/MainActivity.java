@@ -15,6 +15,8 @@ import android.os.Environment;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
+import org.apache.http.conn.ssl.AllowAllHostnameVerifier;
+import java.io.BufferedInputStream;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
@@ -32,11 +34,19 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyManagementException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.FileHandler;
@@ -44,17 +54,42 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.logging.SimpleFormatter;
 
-public class MainActivity extends AppCompatActivity implements View.OnClickListener  {
-    int id = 100;
-    TextView tv;
-    TextView tv2;
-    TextView tv_token;
-    Button btn_on;
-    Button btn_off;
-    Button btn_qr;
-    String CommandPath ="CashCommand.txt";
-    String TokenPath="Token.txt";
-    String AddressPath="ServerAddress.txt";
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManagerFactory;
+
+public class MainActivity extends AppCompatActivity implements View.OnClickListener {
+    Integer notificationId;
+
+    TextView textLastAlarm;
+    TextView textConnectionStatus;
+    TextView textToken;
+    Button buttonOn;
+    Button buttonOff;
+    Button buttonQR;
+
+    final String LAST_COMMAND_FILE_PATH = "Command.txt";
+    final String TOKEN_PATH = "Token.txt";
+    final String SERVER_ADDRESS_PATH = "ServerAddress.txt";
+
+    final Integer LOG_FILE_COUNT = 5;
+    final Integer LOG_SIZE = 1024*100;
+    final Boolean LOG_APPEND = true;
+    final String LOG_FILE_NAME_PATTERN = "Iot_App_Log_%g.log";
+
+    final Integer CONNECTION_TIMEOUT = 2000;
+    final Integer REQUESTS_TIMEOUT = 2;
+
+    final Integer FIRST_NOTIFICATION_ID = 100;
+    final Integer MAX_NOTIFICATION_ID = 200;
+
+    final Integer REQUEST_OK=200;
+    enum CODE{
+        CONNECTION_ON,
+        CONNECTION_OFF,
+        ALARM
+    }
     Logger logger;
     String ServerAddress; // поправить
     String token;
@@ -64,38 +99,44 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        tv=findViewById(R.id.textView);
-        tv2=findViewById(R.id.textView2);
-        tv_token=findViewById(R.id.textView3);
-        btn_on = findViewById(R.id.button2);
-        btn_off = findViewById(R.id.button);
-        btn_qr = findViewById(R.id.button3);
+        textLastAlarm = findViewById(R.id.textView);
+        textConnectionStatus = findViewById(R.id.textView2);
+        textToken = findViewById(R.id.textView3);
+        buttonOn = findViewById(R.id.button2);
+        buttonOff = findViewById(R.id.button);
+        buttonQR = findViewById(R.id.button3);
+
+        notificationId = FIRST_NOTIFICATION_ID;
 
         logger = Logger.getLogger(MainActivity.class.getName());
         logger.log(Level.INFO,"application start");
 
-        //LOGGER CONFIG [BEGIN]
         try {
-            String logFileName = Environment.getExternalStorageDirectory() + File.separator + "Iot_App_Log_%g.log";
-            FileHandler logHandler = null;
-            logHandler = new FileHandler(logFileName, 100 * 1024, 5, true);
+            String logFileName = Environment.getExternalStorageDirectory() +
+                    File.separator +
+                    LOG_FILE_NAME_PATTERN;
+            FileHandler logHandler = new FileHandler(logFileName, LOG_SIZE,
+                    LOG_FILE_COUNT, LOG_APPEND);
             logHandler.setFormatter(new SimpleFormatter());
             logger.addHandler(logHandler);
             logger.log(Level.INFO, "logger is ready");
         } catch (IOException e) {
-            logger.log(Level.SEVERE, "logger is not ready");
+            logger.log(Level.SEVERE, "logger is not ready: input/output",e);
         }
-        //LOGGER CONFIG [END]
+        catch (Exception e) {
+            logger.log(Level.SEVERE, "logger is not ready: unexpected",e);
+        }
 
-        btn_on.setOnClickListener(v -> SetStringToFile("on", CommandPath));
-        btn_off.setOnClickListener(v -> SetStringToFile("off", CommandPath));
+
+        btn_on.setOnClickListener(v -> SetStringToFile("on", LAST_COMMAND_FILE_PATH));
+        btn_off.setOnClickListener(v -> SetStringToFile("off",  LAST_COMMAND_FILE_PATH));
         btn_qr.setOnClickListener(this);
 
         createNotificationChannel();
 
-        token=GetStringFromFile(TokenPath);
-        tv_token.setText(token);
-        ServerAddress=GetStringFromFile(AddressPath);
+        token=GetStringFromFile(TOKEN_PATH);
+        serverAddress = getStringFromFile(SERVER_ADDRESS_PATH);
+        textToken.setText(token);
         ShowConnectionOff();
 
         RequestSender RC = new RequestSender();
