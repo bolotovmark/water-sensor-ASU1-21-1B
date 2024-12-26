@@ -250,24 +250,19 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             } catch (CertificateException e) {
                 logger.log(Level.SEVERE, "SSL error: certificate", e);
                 return null;
-            }
-            catch (IOException e) {
+            } catch (IOException e) {
                 logger.log(Level.SEVERE, "SSL error: input/output", e);
                 return null;
-            }
-            catch (KeyStoreException e) {
+            } catch (KeyStoreException e) {
                 logger.log(Level.SEVERE, "SSL error: keystore", e);
                 return null;
-            }
-            catch (NoSuchAlgorithmException e) {
+            } catch (NoSuchAlgorithmException e) {
                 logger.log(Level.SEVERE, "SSL error: algorithm", e);
                 return null;
-            }
-            catch (KeyManagementException e) {
+            } catch (KeyManagementException e) {
                 logger.log(Level.SEVERE, "SSL error: key management", e);
                 return null;
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 logger.log(Level.SEVERE, "SSL error: unexpected", e);
                 return null;
             }
@@ -279,19 +274,21 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         protected Void doInBackground(Void... voids)
         {
             while (true) {
-                String command=GetStringFromFile(CommandPath);
+                String command=GetStringFromFile(LAST_COMMAND_FILE_PATH);
                 if (!command.equals("none"))
                 {
                     boolean endOperation=false;
                     while (!endOperation) {
                         try {
-                            command=GetCashCommand();
-                            logger.log(Level.INFO,"try to send command "+command);
+                            command=getStringFromFile(LAST_COMMAND_FILE_PATH);
+                            logger.log(Level.INFO,String.format("try to send command %s", command));
 
                             URL obj = new URL(ServerAddress);
                             HttpURLConnection con = (HttpURLConnection) obj.openConnection();
+                            con.setHostnameVerifier(new AllowAllHostnameVerifier()); //only for testing app
+                            con.setSSLSocketFactory(getSSL());
                             con.setRequestMethod("POST");
-                            con.setConnectTimeout(2000);
+                            con.setConnectTimeout(CONNECTION_TIMEOUT);
                             con.setRequestProperty("Content-Type", "text/html");
                             on.setRequestProperty("User-Agent", "mobile");
                             con.setRequestProperty("Token", token);
@@ -301,27 +298,41 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                             byte[] input = command.getBytes(StandardCharsets.UTF_8);
                             os.write(input, 0, input.length);
 
-                            int r=con.getResponseCode();
-                            BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
+                            int code=con.getResponseCode();
 
+                            InputStreamReader isr = new InputStreamReader(con.getInputStream());
+                            BufferedReader br = new BufferedReader(isr);
                             String inputLine;
-                            StringBuilder data=new StringBuilder();
-                            while ((inputLine = in.readLine()) != null)
+                            StringBuilder data = new StringBuilder();
+                            while ((inputLine = br.readLine()) != null)
                             {
                                 data.append(inputLine);
                             }
-                            in.close();
+                            br.close();
+                            if (code==REQUEST_OK) {
 
-
-                            publishProgress("connection on");
-                            endOperation=true;
-                            SetStringToFile("none", CommandPath);
-                            logger.log(Level.INFO,"command "+command+" sent, code: "+ r +" data: "+data);
+                                publishProgress("CODE.CONNECTION_ON");
+                                endOperation = true;
+                                SetStringToFile("none", LAST_COMMAND_FILE_PATH);
+                                logger.log(Level.INFO, String.format("command %s sent, code: %d",command,code));
+                            }
+                            else
+                            {
+                                publishProgress(CODE.CONNECTION_OFF);
+                                logger.log(Level.SEVERE,String.format("connection error: code %d",code));
+                            }
 
                         } catch (Exception e) {
                             logger.log(Level.SEVERE,"connection failure",e);
-                            publishProgress("connection off");
-                            try {TimeUnit.SECONDS.sleep(2);} catch (InterruptedException ignored) {}
+                            publishProgress(CODE.CONNECTION_OFF);
+                            try {TimeUnit.SECONDS.sleep(REQUESTS_TIMEOUT);}
+                            catch (InterruptedException e2)
+                            {
+                                logger.log(Level.SEVERE, "timeout: interrupted",e2);
+                            }
+                            catch (Exception e2) {
+                                logger.log(Level.SEVERE, "timeout: unexpected",e2);
+                            }
                         }
                     }
                 }
@@ -330,34 +341,65 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 try {
                     URL url = new URL(ServerAddress);
                     HttpURLConnection con = (HttpURLConnection) url.openConnection();
-                    con.setConnectTimeout(2000);
+                    con.setHostnameVerifier(new AllowAllHostnameVerifier()); //only for testing app
+                    con.setSSLSocketFactory(getSSL());
+                    con.setConnectTimeout(CONNECTION_TIMEOUT);
                     con.setRequestMethod("GET");
                     con.setRequestProperty("Content-Type", "text/html");
                     con.setRequestProperty("User-Agent", "mobile");
                     con.setRequestProperty("Token", token);
                     BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
+                    InputStreamReader isr = new InputStreamReader(con.getInputStream());
+                    BufferedReader br = new BufferedReader(isr);
+
                     String inputLine;
-                    while ((inputLine = in.readLine()) != null) {
+                    while ((inputLine = br.readLine()) != null) {
                         data.append(inputLine)
                     }
-                    in.close();
-                    publishProgress("connection on");
+                    Integer code=con.getResponseCode();
+
+                    if (code==REQUEST_OK)
+                    {
+                        publishProgress(CODE.CONNECTION_ON);
+                    }
+                    else
+                    {
+                        publishProgress(CODE.CONNECTION_OFF);
+                        logger.log(Level.SEVERE,String.format("connection error: code %d",code));
+                    }
+
                 } catch (Exception e) {
                     logger.log(Level.SEVERE,"connection failure");
-                    publishProgress("connection off");
+                    publishProgress(CODE.CONNECTION_OFF);
                 }
-                publishProgress(data.toString());
+                if (data.toString().equals("w")) {
+                    publishProgress(CODE.ALARM);
 
-                try {TimeUnit.SECONDS.sleep(3);} catch (InterruptedException ignored) {}
+                    try {
+                        TimeUnit.SECONDS.sleep(REQUESTS_TIMEOUT);
+                    } catch (InterruptedException e) {
+                        logger.log(Level.SEVERE, "timeout: interrupted");
+                    }
+                    catch (Exception e) {
+                        logger.log(Level.SEVERE, "timeout: unexpected");
+                    }
+                }
+
             }
         }
 
         @Override
-        protected void onProgressUpdate(String... messages) {
+        protected void onProgressUpdate(CODE... messages) {
             super.onProgressUpdate(messages[0]);
 
             switch (messages[0]) {
-                case "w":
+                case CONNECTION_ON:
+                    showConnectionOn();
+                    break;
+                case CONNECTION_OFF:
+                    showConnectionOff();
+                    break;
+                case ALARM:
                     logger.log(Level.INFO, "alarm signal");
                     NotificationCompat.Builder builder = new NotificationCompat.Builder(getApplicationContext(), "101")
                             .setSmallIcon(R.drawable.signalicon)
@@ -365,21 +407,18 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                             .setContentText("сработала сигнализация")
                             .setPriority(NotificationCompat.PRIORITY_DEFAULT);
 
-                    id += 1;
-                    if (id > 200) id = 101;
+                    notificationId += 1;
+                    if (notificationId > MAX_NOTIFICATION_ID)
+                        notificationId = FIRST_NOTIFICATION_ID;
 
                     NotificationManagerCompat notificationManager = NotificationManagerCompat.from(getApplicationContext());
-                    notificationManager.notify(id, builder.build());
+                    notificationManager.notify(notificationId, builder.build());
 
                     Date date = new Date();
-                    tv.setText(date.toString());
+                    textLastAlarm.setText(date.toString());
                     break;
-                case "connection on":
-                    ShowConnectionOn();
-                    break;
-                case "connection off":
-                    ShowConnectionOff();
-                    break;
+                default:
+                    logger.log(Level.WARNING, "server answer: unexpected");
             }
         }
     }
