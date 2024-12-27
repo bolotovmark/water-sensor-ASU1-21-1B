@@ -1,0 +1,17 @@
+[Unit]
+Description=Python Water Service
+After=syslog.target
+After=network.target
+
+[Service]
+Type=simple
+PIDFile=/run/python_water_service.pid
+WorkingDirectory=/home/bolmark/Source/python/embedded_programm
+ExecStart=python3 main.py
+Restart=on-failure
+OOMScoreAdjust=-100
+User=bolmark
+SyslogIdentifier="python_water_service"
+
+[Install]
+WantedBy=multi-user.target
