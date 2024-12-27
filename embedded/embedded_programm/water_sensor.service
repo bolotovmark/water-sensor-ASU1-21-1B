@@ -6,11 +6,11 @@ After=network.target
 [Service]
 Type=simple
 PIDFile=/run/python_water_service.pid
-ExecStart=
+WorkingDirectory=/home/bolmark/Source/python/embedded_programm
+ExecStart=python3 main.py
 Restart=on-failure
 OOMScoreAdjust=-100
-StandardOutput=syslog
-StandardError=syslog
+User=bolmark
 SyslogIdentifier="python_water_service"
 
 [Install]
